@@ -1,0 +1,20 @@
+# node modules (nunca subir)
+node_modules/
+
+# build folder (solo subir a gh-pages si es necesario)
+dist/
+
+# entorno
+.env
+
+# logs
+*.log
+npm-debug.log*
+
+# sistema
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
