@@ -1,0 +1,362 @@
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import Navbar from "../../components/Navbar";
+import BotonPrincipal from "../../components/BotonPrincipal";
+import ModalBase from "../../components/ui/ModalBase";
+import API_BASE_URL from "../../config/apiConfig";
+import { useAuth } from "../../context/AuthContext";
+import { QRCodeCanvas } from "qrcode.react";
+
+export default function SubirDocumentosCliente() {
+  const [contratoURL, setContratoURL] = useState(null);
+  const [aprobacionURL, setAprobacionURL] = useState(null);
+  const [datosContrato, setDatosContrato] = useState(null);
+  const [datosAprobacion, setDatosAprobacion] = useState(null);
+  const [vistaModal, setVistaModal] = useState(null);
+  const [cargandoContrato, setCargandoContrato] = useState(false);
+  const [cargandoAprobacion, setCargandoAprobacion] = useState(false);
+  const { auth } = useAuth();
+  const [codigoFinal, setCodigoFinal] = useState(null);
+  const [mostrarSimulacion, setMostrarSimulacion] = useState(false);
+  const [monto, setMonto] = useState(0);
+
+  const manejarArchivo = async (e, tipo) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+
+    const url = URL.createObjectURL(archivo);
+    const formData = new FormData();
+    formData.append("imagen", archivo);
+
+    const idTipo = tipo === "contrato" ? 1 : 2;
+
+    if (tipo === "contrato") {
+      setContratoURL(url);
+      setDatosContrato(null);
+      setCargandoContrato(true);
+    } else {
+      setAprobacionURL(url);
+      setDatosAprobacion(null);
+      setCargandoAprobacion(true);
+    }
+
+    try {
+      const res = await axios.post(
+        `${API_BASE_URL}/rapicredito/ocr/procesarEvidencia?id=${idTipo}`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${auth.token}`,
+          },
+        }
+      );
+
+      if (tipo === "contrato") {
+        setDatosContrato(res.data);
+      } else {
+        setDatosAprobacion(res.data);
+      }
+    } catch (error) {
+      console.error("❌ Error al procesar OCR:", error);
+      if (tipo === "contrato") {
+        setDatosContrato({ error: "❌ Error al procesar el contrato" });
+      } else {
+        setDatosAprobacion({ error: "❌ Error al procesar la aprobación" });
+      }
+    } finally {
+      if (tipo === "contrato") {
+        setCargandoContrato(false);
+      } else {
+        setCargandoAprobacion(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (
+      datosContrato?.codigoCarrito &&
+      datosAprobacion?.codigoCarrito &&
+      datosContrato.codigoCarrito === datosAprobacion.codigoCarrito &&
+      datosAprobacion.aprobado === true
+    ) {
+      setCodigoFinal(datosContrato.codigoCarrito);
+    } else {
+      setCodigoFinal(null);
+    }
+  }, [datosContrato, datosAprobacion]);
+
+  return (
+  <>
+    <Navbar />
+    <div className="p-6 w-full max-w-[90rem] mx-auto">
+      <h2 className="text-2xl font-bold text-[#002F6C] mb-6">
+        📄 Documentos del Cliente
+      </h2>
+
+      {/* Bloque principal de 3 columnas */}
+      <div
+        className={`grid gap-6 ${
+          codigoFinal ? "md:grid-cols-3" : "md:grid-cols-2"
+        } grid-cols-1`}
+      >
+        {/* Contrato */}
+        <div className="flex flex-col items-center border rounded-xl p-4 shadow-md bg-white">
+          {!codigoFinal && (
+            <>
+              <label className="font-medium text-lg text-[#002F6C] mb-2">
+                Subir contrato firmado
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => manejarArchivo(e, "contrato")}
+                className="mb-4"
+              />
+            </>
+          )}
+          {contratoURL && (
+            <>
+              <div
+                className="cursor-pointer border rounded shadow hover:scale-105 transition"
+                onClick={() => setVistaModal(contratoURL)}
+              >
+                <img
+                  src={contratoURL}
+                  alt="Contrato"
+                  className="max-h-48 object-contain"
+                />
+              </div>
+              <div className="mt-4 w-full bg-gray-100 p-3 rounded shadow text-sm max-h-52 overflow-auto whitespace-pre-wrap">
+                <p className="font-semibold mb-1 text-[#002F6C]">
+                  🧾 Resultado del contrato:
+                </p>
+                {cargandoContrato ? (
+                  "Procesando OCR..."
+                ) : datosContrato?.error ? (
+                  <p className="text-red-600">{datosContrato.error}</p>
+                ) : (
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li>
+                      <strong>Código del carrito:</strong>{" "}
+                      {datosContrato?.codigoCarrito || "No detectado"}
+                    </li>
+                    <li>
+                      <strong>Nombre:</strong>{" "}
+                      {datosContrato?.nombre || "No detectado"}
+                    </li>
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Aprobación */}
+        <div className="flex flex-col items-center border rounded-xl p-4 shadow-md bg-white">
+          {!codigoFinal && (
+            <>
+              <label className="font-medium text-lg text-[#002F6C] mb-2">
+                Subir imagen de aprobación de crédito
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => manejarArchivo(e, "aprobacion")}
+                className="mb-4"
+              />
+            </>
+          )}
+          {aprobacionURL && (
+            <>
+              <div
+                className="cursor-pointer border rounded shadow hover:scale-105 transition"
+                onClick={() => setVistaModal(aprobacionURL)}
+              >
+                <img
+                  src={aprobacionURL}
+                  alt="Aprobación"
+                  className="max-h-48 object-contain"
+                />
+              </div>
+              <div className="mt-4 w-full bg-gray-100 p-3 rounded shadow text-sm max-h-52 overflow-auto whitespace-pre-wrap">
+                <p className="font-semibold mb-1 text-[#002F6C]">
+                  🧾 Resultado de aprobación:
+                </p>
+                {cargandoAprobacion ? (
+                  "Procesando OCR..."
+                ) : datosAprobacion?.error ? (
+                  <p className="text-red-600">{datosAprobacion.error}</p>
+                ) : (
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li>
+                      <strong>Código del carrito:</strong>{" "}
+                      {datosAprobacion?.codigoCarrito || "No detectado"}
+                    </li>
+                    <li>
+                      <strong>¿Aprobado?:</strong>{" "}
+                      {datosAprobacion?.aprobado ? "✅ Sí" : "❌ No detectado"}
+                    </li>
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* QR generado */}
+        {codigoFinal && (
+          <div className="flex flex-col items-center border rounded-xl p-4 shadow-md bg-white">
+            <h3 className="text-lg font-semibold text-[#002F6C] mb-2">
+              📲 Escanea con la app móvil
+            </h3>
+            <QRCodeCanvas value={codigoFinal} size={150} />
+            <p className="text-sm text-gray-600 mt-4 text-center">
+              Código del carrito:
+              <br />
+              <strong>{codigoFinal}</strong>
+            </p>
+            <BotonPrincipal
+              onClick={() => setMostrarSimulacion(true)}
+              className="mt-4"
+            >
+              {mostrarSimulacion
+                ? "Continuar compra"
+                : "Consultar evidencia escaneada"}
+            </BotonPrincipal>
+          </div>
+        )}
+      </div>
+
+      {/* Simulación de crédito como bloque independiente */}
+      {mostrarSimulacion && (
+        <div className="mt-12 w-full">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+            {/* Lado izquierdo 20% */}
+            <div className="col-span-1 border rounded-2xl bg-white p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-[#002F6C] mb-4">
+                💰 Simulador de crédito
+              </h3>
+              <label className="block text-sm text-gray-600 font-medium mb-1">
+                Monto del producto
+              </label>
+              <input
+                type="number"
+                min="0"
+                inputMode="numeric"
+                className="w-full border border-gray-300 p-3 rounded-lg text-right text-lg font-semibold text-[#002F6C] focus:ring-2 focus:ring-[#002F6C] focus:outline-none"
+                value={monto}
+                onChange={(e) =>
+                  setMonto(Number(e.target.value.replace(/^0+/, "")))
+                }
+                placeholder="0"
+              />
+              <p className="mt-4 text-sm font-semibold text-[#002F6C]">
+                Enganche (22%):
+                <br />
+                {(monto * 0.22 || 0).toLocaleString("es-MX", {
+                  style: "currency",
+                  currency: "MXN",
+                })}
+              </p>
+            </div>
+
+            {/* Lado derecho 80% */}
+<div className="col-span-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+  {[3, 6, 9, 12].map((meses) => {
+    let factorInteres = 1.45;
+    if (meses === 6) factorInteres += 0.06;
+    if (meses === 9) factorInteres += 0.12;
+    if (meses === 12) factorInteres += 0.18;
+
+    const montoConInteres = monto * factorInteres;
+    const pagoMensual = montoConInteres / meses;
+    const pagoQuincenal = montoConInteres / (meses * 2);
+    const pagoSemanal = montoConInteres / (meses * 4);
+
+    return (
+      <div
+        key={meses}
+        className="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-2xl shadow-md p-6 hover:shadow-lg transition"
+      >
+        <h4 className="text-center text-[#002F6C] font-bold text-lg mb-4">
+          {meses} meses
+        </h4>
+
+        <div className="space-y-2 text-sm text-gray-800 font-medium">
+          <p>
+            💵 Total con interés:
+            <br />
+            <span className="text-[#002F6C] font-bold text-base">
+              {montoConInteres.toLocaleString("es-MX", {
+                style: "currency",
+                currency: "MXN",
+              })}
+            </span>
+          </p>
+
+          <p>
+            📅 Mensual:
+            <br />
+            <span className="text-gray-700">
+              {pagoMensual.toLocaleString("es-MX", {
+                style: "currency",
+                currency: "MXN",
+              })}
+            </span>
+          </p>
+
+          <p>
+            🗓️ Quincenal:
+            <br />
+            <span className="text-gray-700">
+              {pagoQuincenal.toLocaleString("es-MX", {
+                style: "currency",
+                currency: "MXN",
+              })}
+            </span>
+          </p>
+
+          <p>
+            📆 Semanal:
+            <br />
+            <span className="text-gray-700">
+              {pagoSemanal.toLocaleString("es-MX", {
+                style: "currency",
+                currency: "MXN",
+              })}
+            </span>
+          </p>
+        </div>
+
+        <div className="mt-4 text-xs text-gray-500 text-center">
+          {meses} pagos mensuales • {meses * 2} quincenales •{" "}
+          {meses * 4} semanales
+        </div>
+      </div>
+    );
+  })}
+</div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal */}
+      <ModalBase
+        mostrar={!!vistaModal}
+        titulo="📷 Vista de documento"
+        onCerrar={() => setVistaModal(null)}
+        mostrarBotonConfirmar={false}
+        anchoMaximo="max-w-4xl"
+      >
+        <img
+          src={vistaModal}
+          alt="Vista Ampliada"
+          className="w-full rounded"
+        />
+      </ModalBase>
+    </div>
+  </>
+);
+
+}
